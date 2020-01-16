@@ -89,6 +89,7 @@
 #include <vtkh/filters/MarchingCubes.hpp>
 #include <vtkh/filters/NoOp.hpp>
 #include <vtkh/filters/Lagrangian.hpp>
+#include <vtkh/filters/LagrangianInterpolation.hpp>
 #include <vtkh/filters/Log.hpp>
 #include <vtkh/filters/ParticleAdvection.hpp>
 #include <vtkh/filters/Recenter.hpp>
@@ -2686,6 +2687,92 @@ VTKHLagrangian::execute()
     set_output<vtkh::DataSet>(lagrangian_output);
 }
 
+VTKHLagrangianInterpolation::VTKHLagrangianInterpolation()
+:Filter()
+{
+// empty
+}
+
+//-----------------------------------------------------------------------------
+VTKHLagrangianInterpolation::~VTKHLagrangianInterpolation()
+{
+// empty
+}
+
+//-----------------------------------------------------------------------------
+void
+VTKHLagrangianInterpolation::declare_interface(Node &i)
+{
+    i["type_name"]   = "vtkh_lagrangian_interpolation";
+    i["port_names"].append() = "in";
+    i["output_port"] = "true";
+}
+
+//-----------------------------------------------------------------------------
+bool
+VTKHLagrangianInterpolation::verify_params(const conduit::Node &params,
+                        conduit::Node &info)
+{
+    info.reset();
+
+    bool res = check_string("field", params, info, true);
+//    res &= check_string("input_path", params, info, true);
+    res &= check_numeric("write_frequency", params, info, true);
+
+    res = true;
+
+    std::vector<std::string> valid_paths;
+    valid_paths.push_back("field");
+//    valid_paths.push_back("input_path");
+    valid_paths.push_back("write_frequency");
+
+    std::string surprises = surprise_check(valid_paths, params);
+
+    if(surprises != "")
+    {
+      res = false;
+      info["errors"].append() = surprises;
+    }
+    return res;
+}
+
+//-----------------------------------------------------------------------------
+void
+VTKHLagrangianInterpolation::execute()
+{
+    vtkh::DataSet *data = nullptr;
+    if(input(0).check_type<vtkh::DataSet>())
+    {
+      data = input<vtkh::DataSet>(0);
+    }
+    else if(input(0).check_type<Node>())
+    {
+      const Node *n_input = input<Node>(0);
+      data = VTKHDataAdapter::BlueprintToVTKHDataSet(*n_input);
+    }
+    else
+    {
+        ASCENT_ERROR("vtkh_lagrangian_interpolation input must be a< vtkh::DataSet> or <Node>");
+    }
+
+    std::string field_name = params()["field"].as_string();
+//    std::string input_path = params()["input_path"].as_string();
+    int write_frequency = params()["write_frequency"].to_int32();
+
+    vtkh::LagrangianInterpolation l_interpolation;
+
+    l_interpolation.SetInput(data);
+    l_interpolation.SetField(field_name);
+//    l_interpolation.SetInputPath(input_path);
+    l_interpolation.SetWriteFrequency(write_frequency);
+    l_interpolation.Update();
+
+    vtkh::DataSet *lagrangian_output = l_interpolation.GetOutput();
+
+    set_output<vtkh::DataSet>(lagrangian_output);
+}
+
+//-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
 VTKHLog::VTKHLog()
